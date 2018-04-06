@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Security;
 using System.Threading.Tasks;
 using Inedo;
@@ -25,12 +26,20 @@ namespace WhiteSource.PackageAccessRules
         [Persistent(Encrypted = true)]
         public SecureString Token { get; set; }
 
+        #region Messy reflection rubbish
+        private static readonly Type PackageHashAlgorithm = Type.GetType("Inedo.ProGet.Feeds.PackageHashAlgorithm,ProGetCoreEx");
+        private static readonly object PackageHashAlgorithm_SHA1 = Enum.Parse(PackageHashAlgorithm, "SHA1");
+        private static readonly Type IExtendedPackageIdentifier = Type.GetType("Inedo.ProGet.Feeds.IExtendedPackageIdentifier,ProGetCoreEx");
+        private static readonly MethodInfo IExtendedPackageIdentifier_GetPackageHash = IExtendedPackageIdentifier.GetMethod("GetPackageHash", new[] { PackageHashAlgorithm });
+        private static readonly PropertyInfo IExtendedPackageIdentifier_Modified = IExtendedPackageIdentifier.GetProperty("Modified", typeof(DateTimeOffset?));
+        #endregion
+
         public override async Task<PackageAccessPolicy> GetPackageAccessPolicyAsync(IPackageIdentifier package)
         {
-            if (!(package is IExtendedPackageIdentifier info))
+            if (!IExtendedPackageIdentifier.IsAssignableFrom(package.GetType()))
                 return PackageAccessPolicy.Allowed;
 
-            var sha1 = info.GetPackageHash(PackageHashAlgorithm.SHA1);
+            var sha1 = (byte[])IExtendedPackageIdentifier_GetPackageHash.Invoke(package, new[] { PackageHashAlgorithm_SHA1 });
             if (sha1 == null)
                 return new PackageAccessPolicy(false, $"Package {package.Name} {package.Version} does not have a SHA1 hash computed. Run the Feed Cleanup task to generate one.");
 
@@ -47,7 +56,7 @@ namespace WhiteSource.PackageAccessRules
                 writer.Write("&timeStamp=");
                 writer.Write(GetTimestamp(DateTime.UtcNow));
                 writer.Write("&diff=");
-                writer.Write(Uri.EscapeDataString(GetDiff(info.Name, info.Version, sha1, info.Modified ?? DateTimeOffset.Now)));
+                writer.Write(Uri.EscapeDataString(GetDiff(package.Name, package.Version, sha1, ((DateTimeOffset?)IExtendedPackageIdentifier_Modified.GetValue(package)) ?? DateTimeOffset.Now)));
             }
 
             JObject envelope;
