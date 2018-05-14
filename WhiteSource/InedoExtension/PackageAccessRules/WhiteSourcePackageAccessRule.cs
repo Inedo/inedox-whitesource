@@ -6,7 +6,6 @@ using System.Net;
 using System.Reflection;
 using System.Security;
 using System.Threading.Tasks;
-using Inedo;
 using Inedo.Diagnostics;
 using Inedo.Documentation;
 using Inedo.Extensibility.PackageAccessRules;
@@ -15,10 +14,11 @@ using Inedo.Serialization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace WhiteSource.PackageAccessRules
+namespace Inedo.Extensions.WhiteSource.PackageAccessRules
 {
     [DisplayName("WhiteSource")]
     [Description("Verifies with WhiteSource that a package is allowed to be downloaded.")]
+    [PersistFrom("WhiteSource.PackageAccessRules.WhiteSourcePackageAccessRule,WhiteSource")]
     public sealed class WhiteSourcePackageAccessRule : PackageAccessRule
     {
         [Required]

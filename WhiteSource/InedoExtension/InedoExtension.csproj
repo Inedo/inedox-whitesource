@@ -7,7 +7,7 @@
     <ProjectGuid>{7ED90183-2059-4262-BB5E-C1BEE6785634}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>WhiteSource</RootNamespace>
+    <RootNamespace>Inedo.Extensions.WhiteSource</RootNamespace>
     <AssemblyName>WhiteSource</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
