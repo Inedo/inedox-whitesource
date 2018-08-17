@@ -42,12 +42,14 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
             using (var requestStream = await request.GetRequestStreamAsync().ConfigureAwait(false))
             using (var writer = new StreamWriter(requestStream, InedoLib.UTF8Encoding))
             {
-                writer.Write("type=CHECK_POLICIES&agent=generic&agentVersion=1.0&token=");
+                writer.Write("type=CHECK_POLICY_COMPLIANCE&agent=generic&agentVersion=2.4.1&pluginVersion=");
+                writer.Write(Uri.EscapeDataString(typeof(WhiteSourcePackageAccessRule).Assembly.GetName().Version.ToString(3)));
+                writer.Write("&token=");
                 writer.Write(Uri.EscapeDataString(AH.Unprotect(this.Token)));
                 writer.Write("&timeStamp=");
                 writer.Write(GetTimestamp(DateTime.UtcNow));
                 writer.Write("&diff=");
-                writer.Write(Uri.EscapeDataString(GetDiff(package.Name, package.Version, sha1, extPackage.Modified ?? DateTimeOffset.Now)));
+                writer.Write(Uri.EscapeDataString(GetDiff(extPackage)));
             }
 
             JObject envelope;
@@ -102,38 +104,40 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
             return new PackageAccessPolicy(false, "WhiteSource returned error when checking policies: " + (string)envelope.Property("message"));
         }
 
-        private static string GetDiff(string name, object version, byte[] sha1, DateTimeOffset lastModified)
+        private static string GetDiff(IExtendedPackageIdentifier package)
         {
+            var coordinates = new JObject(
+                new JProperty("artifactId", package.Name),
+                new JProperty("version", package.Version.ToString())
+            );
+            if (!string.IsNullOrEmpty(package.Group))
+                coordinates["groupId"] = package.Group;
+
+            var sha1 = package.GetPackageHash(PackageHashAlgorithm.SHA1);
+            var sha1Hex = string.Join(string.Empty, sha1.Select(b => b.ToString("x2")));
+
+            var dependency = new JObject(
+                new JProperty("artifactId", package.Name),
+                new JProperty("version", package.Version),
+                new JProperty("sha1", sha1Hex),
+                new JProperty("checksums",
+                    new JObject(
+                        new JProperty("SHA1", sha1Hex)
+                    )
+                )
+            );
+            if (!string.IsNullOrEmpty(package.Group))
+                dependency["groupId"] = package.Group;
+
+            var md5 = package.GetPackageHash(PackageHashAlgorithm.MD5);
+            if (md5 != null)
+                dependency["checksums"]["MD5"] = string.Join(string.Empty, md5.Select(b => b.ToString("x2")));
+
             using (var textWriter = new StringWriter())
             {
                 using (var jsonWriter = new JsonTextWriter(textWriter) { CloseOutput = false })
                 {
-                    new JArray(
-                        new JObject(
-                            new JProperty("coordinates",
-                                new JObject(
-                                    new JProperty("artifactId", name),
-                                    new JProperty("version", version.ToString())
-                                )
-                            ),
-                            new JProperty("dependencies",
-                                new JArray(
-                                    new JObject(
-                                        new JProperty("artifactId", name),
-                                        new JProperty("sha1", string.Join(string.Empty, sha1.Select(b => b.ToString("x2")))),
-                                        new JProperty("otherPlatformSha1", string.Empty),
-                                        new JProperty("systemPath", string.Empty),
-                                        new JProperty("optional", false),
-                                        new JProperty("children", new JArray()),
-                                        new JProperty("exclusions", new JArray()),
-                                        new JProperty("licenses", new JArray()),
-                                        new JProperty("copyrights", new JArray()),
-                                        new JProperty("lastModified", lastModified.UtcDateTime.ToString("MMM' 'd', 'yyyy' 'h':'mm':'ss' 'tt"))
-                                    )
-                                )
-                            )
-                        )
-                    ).WriteTo(jsonWriter);
+                    new JArray(new JObject(new JProperty("coordinates", coordinates), new JProperty("dependencies", new JArray(dependency)))).WriteTo(jsonWriter);
                 }
 
                 return textWriter.ToString();
