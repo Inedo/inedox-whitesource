@@ -118,7 +118,7 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
 
             var dependency = new JObject(
                 new JProperty("artifactId", package.Name),
-                new JProperty("version", package.Version),
+                new JProperty("version", package.Version.ToString()),
                 new JProperty("sha1", sha1Hex),
                 new JProperty("checksums",
                     new JObject(
