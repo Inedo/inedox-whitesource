@@ -21,9 +21,14 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
     public sealed class WhiteSourcePackageAccessRule : PackageAccessRule
     {
         [Required]
-        [DisplayName("Token")]
+        [DisplayName("Organization Token")]
         [Persistent(Encrypted = true)]
         public SecureString Token { get; set; }
+
+        [DisplayName("Product")]
+        [Description("May be a name or a token, or left blank.")]
+        [Persistent]
+        public string Product { get; set; }
 
         public override async Task<PackageAccessPolicy> GetPackageAccessPolicyAsync(IPackageIdentifier package)
         {
@@ -46,6 +51,11 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
                 writer.Write(Uri.EscapeDataString(typeof(WhiteSourcePackageAccessRule).Assembly.GetName().Version.ToString(3)));
                 writer.Write("&token=");
                 writer.Write(Uri.EscapeDataString(AH.Unprotect(this.Token)));
+                if (!string.IsNullOrEmpty(this.Product))
+                {
+                    writer.Write("&product=");
+                    writer.Write(Uri.EscapeDataString(this.Product));
+                }
                 writer.Write("&timeStamp=");
                 writer.Write(GetTimestamp(DateTime.UtcNow));
                 writer.Write("&diff=");
@@ -101,7 +111,7 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
                 return PackageAccessPolicy.Allowed;
             }
 
-            return new PackageAccessPolicy(false, "WhiteSource returned error when checking policies: " + (string)envelope.Property("message"));
+            return new PackageAccessPolicy(false, "WhiteSource returned error when checking policies: " + (string)envelope.Property("message") + AH.ConcatNE(": ", (string)envelope.Property("data")));
         }
 
         private static string GetDiff(IExtendedPackageIdentifier package)
