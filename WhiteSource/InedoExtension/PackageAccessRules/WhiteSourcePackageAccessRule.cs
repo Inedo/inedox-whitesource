@@ -22,6 +22,7 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
     {
         [Required]
         [DisplayName("Organization Token")]
+        [Description("The alphanumeric string labelled \"API Key\" in WhiteSource Admin / Integration / Organization.")]
         [Persistent(Encrypted = true)]
         public SecureString Token { get; set; }
 
@@ -29,6 +30,12 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
         [Description("May be a name or a token, or left blank.")]
         [Persistent]
         public string Product { get; set; }
+
+        [DisplayName("Endpoint")]
+        [Description("Usually this is https://[domain your WhiteSource control panel is hosted on]/agent")]
+        [DefaultValue("https://saas.whitesourcesoftware.com/agent")]
+        [Persistent]
+        public string Endpoint { get; set; } = "https://saas.whitesourcesoftware.com/agent";
 
         public override async Task<PackageAccessPolicy> GetPackageAccessPolicyAsync(IPackageIdentifier package)
         {
@@ -39,16 +46,18 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
             if (sha1 == null)
                 return new PackageAccessPolicy(false, $"Package {package.Name} {package.Version} does not have a SHA1 hash computed. Run the Feed Cleanup task to generate one.");
 
-            var request = WebRequest.CreateHttp("https://saas.whitesourcesoftware.com/agent");
+            var extensionVersion = typeof(WhiteSourcePackageAccessRule).Assembly.GetName().Version.ToString(3);
+            var request = WebRequest.CreateHttp(this.Endpoint);
             request.Method = "POST";
             request.ContentType = "application/x-www-form-urlencoded; charset=utf8";
+            request.UserAgent = SDK.ProductName + "/" + SDK.ProductVersion + " WhiteSource/" + extensionVersion;
             request.ServicePoint.Expect100Continue = false;
 
             using (var requestStream = await request.GetRequestStreamAsync().ConfigureAwait(false))
             using (var writer = new StreamWriter(requestStream, InedoLib.UTF8Encoding))
             {
                 writer.Write("type=CHECK_POLICY_COMPLIANCE&agent=generic&agentVersion=2.4.1&pluginVersion=");
-                writer.Write(Uri.EscapeDataString(typeof(WhiteSourcePackageAccessRule).Assembly.GetName().Version.ToString(3)));
+                writer.Write(Uri.EscapeDataString(extensionVersion));
                 writer.Write("&token=");
                 writer.Write(Uri.EscapeDataString(AH.Unprotect(this.Token)));
                 if (!string.IsNullOrEmpty(this.Product))
