@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using System.Runtime.InteropServices;
+using Inedo.Extensibility;
 
 [assembly: AssemblyTitle("WhiteSource")]
 [assembly: AssemblyDescription("Contains a Package Access Rule which checks a package with WhiteSource.")]
@@ -9,3 +10,4 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyVersion("1.0.5")]
 [assembly: AssemblyFileVersion("1.0.5")]
 [assembly: ComVisible(false)]
+[assembly: AppliesTo(InedoProduct.ProGet)]
