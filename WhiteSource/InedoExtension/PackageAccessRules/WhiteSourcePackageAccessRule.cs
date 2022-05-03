@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Security;
+using System.Threading;
 using System.Threading.Tasks;
 using Inedo.Diagnostics;
 using Inedo.Documentation;
@@ -37,9 +38,9 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
         [Persistent]
         public string Endpoint { get; set; } = "https://saas.whitesourcesoftware.com/agent";
 
-        public override async Task<PackageAccessPolicy> GetPackageAccessPolicyAsync(IPackageIdentifier package)
+        public override async ValueTask<PackageAccessPolicy> GetPackageAccessPolicyAsync(IPackageIdentifier package, CancellationToken cancellationToken = default)
         {
-            if (!(package is IExtendedPackageIdentifier extPackage))
+            if (package is not IExtendedPackageIdentifier extPackage)
                 return PackageAccessPolicy.Allowed;
 
             var sha1 = extPackage.GetPackageHash(PackageHashAlgorithm.SHA1);
@@ -74,21 +75,17 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
             JObject envelope;
             try
             {
-                using (var response = (HttpWebResponse)await request.GetResponseAsync().ConfigureAwait(false))
-                using (var reader = new StreamReader(response.GetResponseStream(), InedoLib.UTF8Encoding))
+                using var response = (HttpWebResponse)await request.GetResponseAsync().ConfigureAwait(false);
+                using var reader = new StreamReader(response.GetResponseStream(), InedoLib.UTF8Encoding);
+                try
                 {
-                    try
-                    {
-                        using (var jsonReader = new JsonTextReader(reader))
-                        {
-                            envelope = JObject.Load(jsonReader);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        this.LogError("Invalid data from WhiteSource; expected JSON", ex.ToString());
-                        return new PackageAccessPolicy(false, "Invalid data from WhiteSource. See the ProGet error logs for more information.");
-                    }
+                    using var jsonReader = new JsonTextReader(reader);
+                    envelope = JObject.Load(jsonReader);
+                }
+                catch (Exception ex)
+                {
+                    this.LogError("Invalid data from WhiteSource; expected JSON", ex.ToString());
+                    return new PackageAccessPolicy(false, "Invalid data from WhiteSource. See the ProGet error logs for more information.");
                 }
             }
             catch (WebException ex)
@@ -120,7 +117,7 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
                 return PackageAccessPolicy.Allowed;
             }
 
-            return new PackageAccessPolicy(false, "WhiteSource returned error when checking policies: " + (string)envelope.Property("message") + AH.ConcatNE(": ", (string)envelope.Property("data")));
+            return new PackageAccessPolicy(false, "WhiteSource returned error when checking policies: " + (string)envelope.Property("message") + ": " + (string)envelope.Property("data"));
         }
 
         private static string GetDiff(IExtendedPackageIdentifier package)
@@ -152,15 +149,13 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
             if (md5 != null)
                 dependency["checksums"]["MD5"] = string.Join(string.Empty, md5.Select(b => b.ToString("x2")));
 
-            using (var textWriter = new StringWriter())
+            using var textWriter = new StringWriter();
+            using (var jsonWriter = new JsonTextWriter(textWriter) { CloseOutput = false })
             {
-                using (var jsonWriter = new JsonTextWriter(textWriter) { CloseOutput = false })
-                {
-                    new JArray(new JObject(new JProperty("coordinates", coordinates), new JProperty("dependencies", new JArray(dependency)))).WriteTo(jsonWriter);
-                }
-
-                return textWriter.ToString();
+                new JArray(new JObject(new JProperty("coordinates", coordinates), new JProperty("dependencies", new JArray(dependency)))).WriteTo(jsonWriter);
             }
+
+            return textWriter.ToString();
         }
         private static long GetTimestamp(DateTime d) => (long)(d - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalMilliseconds;
     }
