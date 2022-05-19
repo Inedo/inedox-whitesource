@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Security;
+using System.Threading;
 using System.Threading.Tasks;
 using Inedo.Diagnostics;
 using Inedo.Documentation;
@@ -37,7 +38,7 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
         [Persistent]
         public string Endpoint { get; set; } = "https://saas.whitesourcesoftware.com/agent";
 
-        public override async Task<PackageAccessPolicy> GetPackageAccessPolicyAsync(IPackageIdentifier package)
+        public override async ValueTask<PackageAccessPolicy> GetPackageAccessPolicyAsync(IPackageIdentifier package, CancellationToken cancellationToken = default)
         {
             if (!(package is IExtendedPackageIdentifier extPackage))
                 return PackageAccessPolicy.Allowed;
@@ -47,7 +48,9 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
                 return new PackageAccessPolicy(false, $"Package {package.Name} {package.Version} does not have a SHA1 hash computed. Run the Feed Cleanup task to generate one.");
 
             var extensionVersion = typeof(WhiteSourcePackageAccessRule).Assembly.GetName().Version.ToString(3);
+#pragma warning disable SYSLIB0014 // Type or member is obsolete
             var request = WebRequest.CreateHttp(this.Endpoint);
+#pragma warning restore SYSLIB0014 // Type or member is obsolete
             request.Method = "POST";
             request.ContentType = "application/x-www-form-urlencoded; charset=utf8";
             request.UserAgent = SDK.ProductName + "/" + SDK.ProductVersion + " WhiteSource/" + extensionVersion;
@@ -120,7 +123,7 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
                 return PackageAccessPolicy.Allowed;
             }
 
-            return new PackageAccessPolicy(false, "WhiteSource returned error when checking policies: " + (string)envelope.Property("message") + AH.ConcatNE(": ", (string)envelope.Property("data")));
+            return new PackageAccessPolicy(false, "WhiteSource returned error when checking policies: " + (string)envelope.Property("message") + (envelope.Property("data") != null && !string.IsNullOrWhiteSpace((string)envelope.Property("data")) ? (": "+ (string)envelope.Property("data")) : string.Empty));
         }
 
         private static string GetDiff(IExtendedPackageIdentifier package)
@@ -163,5 +166,6 @@ namespace Inedo.Extensions.WhiteSource.PackageAccessRules
             }
         }
         private static long GetTimestamp(DateTime d) => (long)(d - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalMilliseconds;
+
     }
 }
